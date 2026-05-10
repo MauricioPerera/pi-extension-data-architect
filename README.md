@@ -20,7 +20,10 @@ You can install this extension directly via the `pi` CLI:
 pi install git:https://github.com/your-username/pi-extension-data-architect
 ```
 
-## 🛠️ Available Tools
+## 🛠️ Available Tools & Skills
+
+### Tools (The "How")
+The extension provides the following tools to manage the data:
 
 | Tool | Description |
 |---|---|
@@ -31,6 +34,12 @@ pi install git:https://github.com/your-username/pi-extension-data-architect
 | `arch_aggregate` | Perform complex data analysis and grouping. |
 | `arch_list_tables` | List all architectures created by the agent. |
 | `arch_get_schema` | Retrieve the definition of a specific table. |
+
+### Skills (The "Why" and "When")
+This package includes specialized skills that tell the agent how to use these tools professionally:
+
+- **Data Architect**: Guidance on how to design a cohesive data system from a user's request (Analysis $\rightarrow$ Design $\rightarrow$ Implementation).
+- **Tree Operator**: A specialized methodology for managing "Reasoning Trees". It teaches the agent to navigate documents by descending through hierarchical summaries rather than performing flat searches, ensuring high precision and traceability.
 
 ## 📚 Example Usage
 
