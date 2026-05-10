@@ -1,0 +1,12 @@
+{
+  "tableName": "crm_clients",
+  "columns": [
+    { "name": "FullName", "type": "text", "required": true },
+    { "name": "Email", "type": "email", "unique": true, "required": true },
+    { "name": "Company", "type": "text" },
+    { "name": "Status", "type": "select", "options": ["Lead", "Active", "Churned"], "default": "Lead" },
+    { "name": "TotalRevenue", "type": "number", "default": 0 },
+    { "name": "Tags", "type": "multiselect", "options": ["VIP", "Enterprise", "SMB"] },
+    { "name": "LastContact", "type": "date" }
+  ]
+}

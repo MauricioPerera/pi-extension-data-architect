@@ -1,0 +1,11 @@
+{
+  "tableName": "knowledge_wiki",
+  "columns": [
+    { "name": "Title", "type": "text", "required": true },
+    { "name": "Body", "type": "text", "required": true },
+    { "name": "Category", "type": "select", "options": ["Technical", "Process", "Personal", "Ideas"] },
+    { "name": "Tags", "type": "multiselect", "options": ["Urgent", "Reference", "Archived"] },
+    { "name": "CreatedAt", "type": "date", "default": "() => new Date().toISOString()" },
+    { "name": "BlinksCount", "type": "number", "default": 0 }
+  ]
+}
