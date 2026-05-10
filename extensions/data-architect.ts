@@ -82,7 +82,7 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
         description: "Inserts a document into a table. Validates against the schema if one exists.",
         parameters: Type.Object({
             tableName: Type.String({ description: "Target table name" }),
-            data: Type.Object({ description: "The document to insert" })
+            data: Type.Record(Type.String(), Type.Any(), { description: "The document to insert (key-value pairs)" })
         }),
         async execute(_, params) {
             const table = getTable(params.tableName);
@@ -101,9 +101,9 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
         description: "Search for documents using MongoDB-style filters.",
         parameters: Type.Object({
             tableName: Type.String({ description: "Table to query" }),
-            filter: Type.Object({ description: "Query filter (e.g., { age: { $gte: 18 } })" }),
-            sort: Type.Object({ description: "Sort specification" }),
-            limit: Type.Number({ description: "Limit results" })
+            filter: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Query filter (e.g., { age: { $gte: 18 } })" })),
+            sort: Type.Optional(Type.Record(Type.String(), Type.Union([Type.Literal(1), Type.Literal(-1)]), { description: "Sort specification (e.g., { age: -1 })" })),
+            limit: Type.Optional(Type.Number({ description: "Limit results" }))
         }),
         async execute(_, params) {
             const table = getTable(params.tableName);
@@ -124,8 +124,8 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
         description: "Updates documents matching a filter using operators like $set, $inc, $push.",
         parameters: Type.Object({
             tableName: Type.String({ description: "Target table" }),
-            filter: Type.Object({ description: "Filter for documents to update" }),
-            update: Type.Object({ description: "Update object" })
+            filter: Type.Record(Type.String(), Type.Any(), { description: "Filter for documents to update" }),
+            update: Type.Record(Type.String(), Type.Any(), { description: "Update object with operators like { $set: {...} }" })
         }),
         async execute(_, params) {
             const table = getTable(params.tableName);
@@ -143,12 +143,10 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
         description: "Perform complex data analysis: group by, sum, avg, and joins (lookup).",
         parameters: Type.Object({
             tableName: Type.String({ description: "Source table" }),
-            pipeline: Type.Array({
-                items: Type.Object({
-                    stage: Type.String({ description: "Stage: match, lookup, group, sort, limit, project, unwind" }),
-                    params: Type.Any({ description: "Parameters for the stage" })
-                })
-            })
+            pipeline: Type.Array(Type.Object({
+                stage: Type.String({ description: "Stage: match, lookup, group, sort, limit, project, unwind" }),
+                params: Type.Record(Type.String(), Type.Any(), { description: "Parameters for the stage" })
+            }))
         }),
         async execute(_, params) {
             const table = getTable(params.tableName);
