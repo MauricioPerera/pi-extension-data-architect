@@ -1,0 +1,123 @@
+{
+  "name": "Smart Bookmarks",
+  "description": "Bookmark manager with semantic search and auto-tagging",
+  "version": "1.0",
+  "requires": "remote_mode",
+  "tables": [
+    {
+      "name": "bookmarks",
+      "description": "Saved URLs with metadata",
+      "columns": [
+        { "name": "url", "type": "url", "required": true },
+        { "name": "title", "type": "text", "required": true },
+        { "name": "description", "type": "text" },
+        { "name": "full_text", "type": "text", "description": "Scraped content" },
+        { "name": "domain", "type": "text" },
+        { "name": "folder", "type": "select", "options": ["Reading List", "Reference", "Inspiration", "Work", "Personal"], "default": "Reading List" },
+        { "name": "tags", "type": "multiselect", "options": ["AI", "Web Dev", "Design", "Business", "Science", "Tutorial", "Article", "Video", "Paper"] },
+        { "name": "status", "type": "select", "options": ["Unread", "Reading", "Read", "Archived"], "default": "Unread" },
+        { "name": "rating", "type": "number", "description": "1-5 stars" },
+        { "name": "notes", "type": "text" },
+        { "name": "vector_id", "type": "text" },
+        { "name": "saved_at", "type": "text" },
+        { "name": "read_at", "type": "text" }
+      ]
+    },
+    {
+      "name": "highlights",
+      "description": "Important passages from bookmarks",
+      "columns": [
+        { "name": "bookmark_id", "type": "relation", "required": true },
+        { "name": "text", "type": "text", "required": true },
+        { "name": "note", "type": "text" },
+        { "name": "page", "type": "number" },
+        { "name": "color", "type": "select", "options": ["Yellow", "Green", "Blue", "Pink"], "default": "Yellow" },
+        { "name": "created_at", "type": "text" }
+      ]
+    },
+    {
+      "name": "read_sessions",
+      "description": "Reading history and time tracking",
+      "columns": [
+        { "name": "bookmark_id", "type": "relation", "required": true },
+        { "name": "start_time", "type": "text" },
+        { "name": "end_time", "type": "text" },
+        { "name": "duration_seconds", "type": "number" },
+        { "name": "progress_percent", "type": "number" }
+      ]
+    }
+  ],
+  "vector_collections": [
+    {
+      "name": "bookmark_content",
+      "description": "Semantic index of bookmark content",
+      "dimensions": 768,
+      "store_type": "polar",
+      "hybrid_search": true
+    }
+  ],
+  "workflows": [
+    {
+      "name": "Save Bookmark",
+      "steps": [
+        "1. Extract metadata (title, description, domain)",
+        "2. Fetch and extract full text content",
+        "3. arch_insert into bookmarks table",
+        "4. Generate embedding from title + description + content",
+        "5. arch_vector_index with hybrid text search enabled"
+      ]
+    },
+    {
+      "name": "Smart Search",
+      "description": "Find related bookmarks even with different keywords",
+      "steps": [
+        "1. User searches: 'machine learning healthcare'",
+        "2. Generate embedding from query",
+        "3. arch_vector_search_hybrid(query_vector, query_text)",
+        "4. Returns bookmarks about 'AI in medicine', 'deep learning diagnosis', etc."
+      ]
+    },
+    {
+      "name": "Similar Bookmarks",
+      "description": "Find bookmarks similar to current one",
+      "steps": [
+        "1. Get current bookmark's vector",
+        "2. arch_vector_search with that vector",
+        "3. Exclude the bookmark itself",
+        "4. Return related content"
+      ]
+    },
+    {
+      "name": "Auto-Tag Suggestions",
+      "description": "Suggest tags based on semantic similarity",
+      "steps": [
+        "1. Search for bookmarks with similar content",
+        "2. Collect tags from similar bookmarks",
+        "3. Suggest most common tags",
+        "4. User approves or modifies"
+      ]
+    }
+  ],
+  "example_queries": [
+    {
+      "name": "Unread in Reading List",
+      "filter": { "folder": "Reading List", "status": "Unread" },
+      "sort": { "saved_at": -1 }
+    },
+    {
+      "name": "Top rated",
+      "filter": { "rating": { "$gte": 4 } },
+      "sort": { "saved_at": -1 }
+    },
+    {
+      "name": "AI articles",
+      "filter": { "tags": { "$contains": "AI" } }
+    },
+    {
+      "name": "Recently read",
+      "filter": { "status": "Read" },
+      "sort": { "read_at": -1 },
+      "limit": 10
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "name": "Personal CRM",
+  "description": "Customer relationship management for freelancers/small businesses",
+  "version": "1.0",
+  "tables": [
+    {
+      "name": "contacts",
+      "description": "People and companies you interact with",
+      "columns": [
+        { "name": "name", "type": "text", "required": true },
+        { "name": "email", "type": "email", "required": true, "unique": true },
+        { "name": "phone", "type": "phone" },
+        { "name": "company", "type": "text" },
+        { "name": "role", "type": "text", "description": "Job title or position" },
+        { "name": "status", "type": "select", "options": ["Lead", "Prospect", "Active", "Inactive", "Churned"], "default": "Lead" },
+        { "name": "source", "type": "select", "options": ["Referral", "Website", "LinkedIn", "Conference", "Cold Outreach", "Other"] },
+        { "name": "revenue_potential", "type": "number", "default": 0 },
+        { "name": "tags", "type": "multiselect", "options": ["VIP", "Enterprise", "SMB", "Startup", "Partner"] },
+        { "name": "last_contact", "type": "text" },
+        { "name": "notes", "type": "text" },
+        { "name": "created_at", "type": "text" }
+      ]
+    },
+    {
+      "name": "interactions",
+      "description": "Log of all touchpoints with contacts",
+      "columns": [
+        { "name": "contact_id", "type": "relation", "required": true },
+        { "name": "type", "type": "select", "options": ["Email", "Call", "Meeting", "Video Call", "SMS", "Note"], "required": true },
+        { "name": "subject", "type": "text" },
+        { "name": "content", "type": "text", "required": true },
+        { "name": "outcome", "type": "select", "options": ["Positive", "Neutral", "Negative", "No Response", "Follow-up Required"] },
+        { "name": "duration_minutes", "type": "number" },
+        { "name": "date", "type": "text" },
+        { "name": "next_action", "type": "text" },
+        { "name": "reminder_date", "type": "text" }
+      ]
+    },
+    {
+      "name": "deals",
+      "description": "Sales opportunities and pipeline",
+      "columns": [
+        { "name": "contact_id", "type": "relation", "required": true },
+        { "name": "title", "type": "text", "required": true },
+        { "name": "value", "type": "number", "default": 0 },
+        { "name": "currency", "type": "text", "default": "USD" },
+        { "name": "stage", "type": "select", "options": ["Prospecting", "Qualification", "Proposal", "Negotiation", "Closed Won", "Closed Lost"], "default": "Prospecting" },
+        { "name": "probability", "type": "number", "default": 10 },
+        { "name": "expected_close", "type": "text" },
+        { "name": "actual_close", "type": "text" },
+        { "name": "description", "type": "text" },
+        { "name": "created_at", "type": "text" }
+      ]
+    }
+  ],
+  "example_queries": [
+    {
+      "name": "Hot leads",
+      "description": "High-value prospects not contacted recently",
+      "filter": { "status": "Prospect", "revenue_potential": { "$gte": 10000 } }
+    },
+    {
+      "name": "Pipeline value",
+      "description": "Total potential revenue by stage",
+      "aggregate": {
+        "table": "deals",
+        "pipeline": [
+          { "stage": "group", "field": "stage", "accumulators": { "total": { "$sum": "value" }, "count": { "$count": true } } }
+        ]
+      }
+    },
+    {
+      "name": "Follow-ups needed",
+      "description": "Contacts requiring follow-up",
+      "filter": { "interactions.outcome": "Follow-up Required" }
+    }
+  ]
+}

@@ -148,6 +148,319 @@ arch_vector_search_hybrid({
 
 ---
 
+## 🎯 Real-World Use Cases & Examples
+
+### 1. Personal CRM (Local Mode)
+
+**Use Case:** Track contacts, interactions, and deals.
+
+**Prompt:**
+*"Create a personal CRM with tables for contacts and interactions. Each contact should have name, email, company, status (Lead/Active/Churned), and revenue. Track all email exchanges and meetings with each contact."*
+
+**Workflow:**
+```typescript
+// Create schema
+arch_create_table({
+  tableName: "contacts",
+  columns: [
+    { name: "name", type: "text", required: true },
+    { name: "email", type: "email", required: true, unique: true },
+    { name: "company", type: "text" },
+    { name: "status", type: "select", options: ["Lead", "Active", "Churned"], default: "Lead" },
+    { name: "revenue", type: "number", default: 0 },
+    { name: "tags", type: "multiselect", options: ["VIP", "Enterprise", "SMB"] }
+  ]
+})
+
+arch_create_table({
+  tableName: "interactions",
+  columns: [
+    { name: "contact_id", type: "relation", required: true },
+    { name: "type", type: "select", options: ["Email", "Call", "Meeting", "Note"] },
+    { name: "content", type: "text", required: true },
+    { name: "date", type: "text" }
+  ]
+})
+
+// Query with aggregation
+arch_aggregate({
+  tableName: "contacts",
+  pipeline: [
+    { stage: "match", params: { status: "Active" } },
+    { stage: "group", params: { field: "company", accumulators: { totalRevenue: { $sum: "revenue" }, count: { $count: true } } } },
+    { stage: "sort", params: { totalRevenue: -1 } }
+  ]
+})
+```
+
+---
+
+### 2. Knowledge Base with RAG (Remote Mode + Vector Search)
+
+**Use Case:** Build a semantic knowledge base for Retrieval Augmented Generation (RAG).
+
+**Prompt:**
+*"Create a knowledge base collection. I'll give you technical documentation about our API - index each endpoint with its description embedding. Then I can ask questions like 'How do I handle rate limiting?' and get relevant documentation."*
+
+**Workflow:**
+```typescript
+// First, enable remote mode
+// Then index documentation
+const docs = [
+  { id: "rate-limiting", text: "API rate limits are 100 requests per minute. Use exponential backoff for retries. Headers include X-RateLimit-Remaining." },
+  { id: "auth", text: "Authentication uses Bearer tokens in the Authorization header. Tokens expire after 24 hours." },
+  { id: "pagination", text: "Paginated responses include next_cursor and has_more. Use cursor parameter for next page." }
+];
+
+// Generate embeddings (using Workers AI, OpenAI, or local model)
+const embeddings = await generateEmbeddings(docs.map(d => d.text));
+
+// Index with vectors
+arch_vector_batch({
+  collection: "api_docs",
+  vectors: docs.map((doc, i) => ({
+    id: doc.id,
+    vector: embeddings[i],
+    text: doc.text,
+    metadata: { category: "api", created: new Date().toISOString() }
+  }))
+})
+
+// Query time
+const queryEmbedding = await generateEmbedding("How do I handle rate limits?");
+arch_vector_search_hybrid({
+  collection: "api_docs",
+  vector: queryEmbedding,
+  text: "rate limits handling",
+  limit: 3,
+  mode: "rrf"
+})
+// Returns: [{ id: "rate-limiting", score: 0.92, ... }]
+```
+
+---
+
+### 3. Smart Bookmarks (Hybrid Mode)
+
+**Use Case:** Bookmark articles with full-text search AND semantic search.
+
+**Prompt:**
+*"I want to save articles I read online. Store the URL, title, and full text. When I search for 'machine learning in healthcare', find articles about ML even if they don't have those exact words."*
+
+**Workflow:**
+```typescript
+// Table for metadata
+arch_create_table({
+  tableName: "bookmarks",
+  columns: [
+    { name: "url", type: "url", required: true },
+    { name: "title", type: "text", required: true },
+    { name: "full_text", type: "text" },
+    { name: "tags", type: "multiselect", options: ["AI", "Web", "Security", "Cloud"] },
+    { name: "read_date", type: "text" },
+    { name: "vector_id", type: "text" } // Links to vector collection
+  ]
+})
+
+// Save bookmark
+const bookmark = arch_insert({
+  tableName: "bookmarks",
+  data: {
+    url: "https://example.com/ai-article",
+    title: "Deep Learning in Medicine",
+    full_text: "Neural networks are transforming diagnostic imaging...",
+    tags: ["AI"],
+    read_date: "2024-01-15"
+  }
+})
+
+// Create embedding and index
+const embedding = await generateEmbedding("Deep Learning in Medicine Neural networks diagnostic imaging");
+arch_vector_index({
+  collection: "bookmark_vectors",
+  id: bookmark.id,
+  vector: embedding,
+  text: "Deep Learning in Medicine Neural networks diagnostic imaging",
+  metadata: { bookmark_id: bookmark.id, title: "Deep Learning in Medicine" }
+})
+
+// Search
+const queryEmbedding = await generateEmbedding("machine learning healthcare");
+const results = arch_vector_search_hybrid({
+  collection: "bookmark_vectors",
+  vector: queryEmbedding,
+  text: "machine learning healthcare",
+  limit: 10
+})
+
+// Fetch full bookmark data
+const bookmarkIds = results.map(r => r.metadata.bookmark_id);
+arch_query({
+  tableName: "bookmarks",
+  filter: { _id: { $in: bookmarkIds } }
+})
+```
+
+---
+
+### 4. Session Memory with Context
+
+**Use Case:** The agent remembers context from previous conversations.
+
+**Prompt:**
+*"Create a memory system that persists our conversations. When I ask 'What did we discuss about the database schema last week?' find relevant previous interactions."*
+
+**Workflow:**
+```typescript
+// Each conversation turn
+arch_insert({
+  tableName: "conversation_memory",
+  data: {
+    session_id: "abc-123",
+    timestamp: Date.now(),
+    role: "user",
+    message: "We need to redesign the user table",
+    topics: ["database", "schema", "users"]
+  }
+})
+
+// With vector search (remote mode)
+const queryEmbedding = await generateEmbedding("database schema users table");
+arch_vector_search({
+  collection: "conversation_vectors",
+  vector: queryEmbedding,
+  limit: 5,
+  matryoshka: [128, 384, 768] // Faster search
+})
+```
+
+---
+
+### 5. Multi-Tenant Document System
+
+**Use Case:** Separate documents by user/project with cross-collection search.
+
+**Prompt:**
+*"I manage documents for multiple clients. Each client has their own collection. Sometimes I need to search across all clients for similar contracts or proposals."*
+
+**Workflow:**
+```typescript
+// Collections per client
+const clients = ["acme_corp", "globex", "initech"];
+
+// Index documents
+for (const client of clients) {
+  arch_vector_batch({
+    collection: `${client}_docs`,
+    vectors: documents.map(doc => ({
+      id: doc.id,
+      vector: doc.embedding,
+      metadata: { type: doc.type, date: doc.date }
+    }))
+  });
+}
+
+// Search within one client
+arch_vector_search({
+  collection: "acme_corp_docs",
+  vector: queryEmbedding,
+  limit: 10
+})
+
+// Search across ALL clients
+arch_vector_search_cross({
+  collections: clients.map(c => `${c}_docs`),
+  vector: queryEmbedding,
+  limit: 15
+})
+```
+
+---
+
+### 6. Analytics Dashboard Data
+
+**Use Case:** Aggregate data for reporting.
+
+**Prompt:**
+*"Track user signups and activity. Show me a breakdown by month and source, with totals and averages."*
+
+**Workflow:**
+```typescript
+// Store events
+arch_insert({
+  tableName: "events",
+  data: {
+    user_id: "user_123",
+    event_type: "signup",
+    source: "twitter",
+    timestamp: Date.now(),
+    month: "2024-01"
+  }
+})
+
+// Analytics pipeline
+arch_aggregate({
+  tableName: "events",
+  pipeline: [
+    { stage: "match", params: { event_type: "signup" } },
+    { stage: "group", params: {
+      field: "month",
+      accumulators: {
+        totalSignups: { $count: true },
+        bySource: { $push: "source" }
+      }
+    }},
+    { stage: "sort", params: { _id: -1 } }, // Sort by month descending
+    { stage: "limit", params: 12 } // Last 12 months
+  ]
+})
+```
+
+---
+
+### 7. Recommendation Engine (Vector Search)
+
+**Use Case:** Find similar items based on embeddings.
+
+**Prompt:**
+*"I have products with descriptions. When a user views a product, suggest similar ones based on semantic similarity."*
+
+**Workflow:**
+```typescript
+// Index products
+const products = [
+  { id: "prod_1", name: "Wireless Headphones", desc: "Bluetooth noise-canceling headphones with 20h battery" },
+  { id: "prod_2", name: "Running Shoes", desc: "Lightweight breathable shoes for marathon training" },
+  { id: "prod_3", name: "Gaming Headset", desc: "Surround sound headset with mic for gaming" }
+];
+
+// Generate embeddings for descriptions
+const embeddings = await Promise.all(
+  products.map(p => generateEmbedding(p.desc))
+);
+
+arch_vector_batch({
+  collection: "products",
+  vectors: products.map((p, i) => ({
+    id: p.id,
+    vector: embeddings[i],
+    metadata: { name: p.name, category: "electronics" }
+  }))
+});
+
+// Recommend similar to product 1
+const product1Embedding = embeddings[0]; // Wireless Headphones
+arch_vector_search({
+  collection: "products",
+  vector: product1Embedding,
+  limit: 3,
+  metric: "cosine"
+})
+// Returns: [prod_1 (1.0), prod_3 (0.85 - Gaming Headset), prod_2 (0.23 - Running Shoes)]
+```
+
+---
+
 ## 🔧 Generating Embeddings
 
 To use vector search, you need to generate embeddings from text. You can use:

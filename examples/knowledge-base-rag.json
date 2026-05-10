@@ -1,0 +1,104 @@
+{
+  "name": "RAG Knowledge Base",
+  "description": "Retrieval Augmented Generation system for semantic document search",
+  "version": "1.0",
+  "requires": "remote_mode",
+  "tables": [
+    {
+      "name": "documents",
+      "description": "Document metadata and content",
+      "columns": [
+        { "name": "title", "type": "text", "required": true },
+        { "name": "source", "type": "text", "description": "URL or file path" },
+        { "name": "content", "type": "text", "description": "Full text content" },
+        { "name": "summary", "type": "text" },
+        { "name": "category", "type": "select", "options": ["Technical", "Business", "Research", "Tutorial", "Reference"] },
+        { "name": "tags", "type": "multiselect", "options": ["AI", "Web", "Database", "Security", "API", "Cloud"] },
+        { "name": "vector_collection", "type": "text", "default": "kb_vectors" },
+        { "name": "word_count", "type": "number" },
+        { "name": "language", "type": "text", "default": "en" },
+        { "name": "indexed_at", "type": "text" },
+        { "name": "last_updated", "type": "text" }
+      ]
+    },
+    {
+      "name": "chunks",
+      "description": "Document chunks for granular retrieval",
+      "columns": [
+        { "name": "document_id", "type": "relation", "required": true },
+        { "name": "chunk_index", "type": "number", "description": "Position in document" },
+        { "name": "content", "type": "text", "required": true },
+        { "name": "vector_id", "type": "text", "description": "ID in vector collection" },
+        { "name": "token_count", "type": "number" },
+        { "name": "heading", "type": "text", "description": "Section heading" }
+      ]
+    },
+    {
+      "name": "queries_log",
+      "description": "Log of queries and results for optimization",
+      "columns": [
+        { "name": "query_text", "type": "text" },
+        { "name": "query_embedding", "type": "text", "description": "Serialized vector" },
+        { "name": "results", "type": "json" },
+        { "name": "result_count", "type": "number" },
+        { "name": "user_feedback", "type": "select", "options": ["Relevant", "Partially Relevant", "Not Relevant"] },
+        { "name": "latency_ms", "type": "number" },
+        { "name": "timestamp", "type": "text" }
+      ]
+    }
+  ],
+  "vector_collections": [
+    {
+      "name": "kb_vectors",
+      "description": "Main knowledge base vector collection",
+      "dimensions": 768,
+      "store_type": "binary",
+      "hybrid_search": true
+    }
+  ],
+  "workflows": [
+    {
+      "name": "Index Document",
+      "steps": [
+        "1. Generate embedding for document",
+        "2. arch_insert into documents table",
+        "3. arch_vector_index with vector, text, and metadata",
+        "4. (Optional) Split into chunks and index each"
+      ]
+    },
+    {
+      "name": "Query Knowledge Base",
+      "steps": [
+        "1. Generate query embedding",
+        "2. arch_vector_search_hybrid with query vector and text",
+        "3. Fetch full documents from documents table",
+        "4. Return context to LLM for RAG"
+      ]
+    },
+    {
+      "name": "Cross-Collection Search",
+      "steps": [
+        "1. Create multiple collections per category",
+        "2. Index documents in appropriate collection",
+        "3. arch_vector_search_cross to search all at once",
+        "4. Get normalized scores across collections"
+      ]
+    }
+  ],
+  "example_queries": [
+    {
+      "name": "Technical docs",
+      "filter": { "category": "Technical" }
+    },
+    {
+      "name": "AI articles",
+      "filter": { "tags": { "$contains": "AI" } }
+    },
+    {
+      "name": "Recent documents",
+      "filter": {},
+      "sort": { "indexed_at": -1 },
+      "limit": 10
+    }
+  ]
+}
