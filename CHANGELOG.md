@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.2.0] - 2026-05-11
+### Added
+- **Conversation Memory**: Store every message in `messages` table to survive context compaction.
+- **4 New Tools**:
+  - `arch_message_save`: Persist user/assistant messages with auto-incremented turns.
+  - `arch_message_history`: Retrieve full conversation history by conversation ID.
+  - `arch_conversations`: List all stored conversations with message counts.
+  - `arch_message_create_table`: Bootstrap the `messages` table.
+- **Auto-Turn Tracking**: `arch_message_save` automatically queries last turn and increments.
+- **Updated README**: Added Conversation Memory to Features section.
+- **Updated Bootstrap Script**: Registers `messages` table creation on first run.
+
 ## [2.1.0] - 2026-05-11
 ### Added
 - **Dynamic Skill Registry**: New `skill-registry` skill enabling on-demand skill discovery via js-doc-store-server.

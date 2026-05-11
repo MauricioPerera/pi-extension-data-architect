@@ -105,6 +105,25 @@ async function ensureSkillsTable(client) {
     console.log(result.success ? '✅ Table created.' : `⚠️ ${result.message || 'Unknown result'}`);
 }
 
+async function ensureMessagesTable(client) {
+    if (await tableExists(client, 'messages')) {
+        console.log('✅ Table "messages" already exists.');
+        return;
+    }
+
+    console.log('Creating table "messages"...');
+    const result = await client.createTable('messages', [
+        { name: 'conversation_id', type: 'text', required: true },
+        { name: 'turn', type: 'number' },
+        { name: 'role', type: 'text', required: true },
+        { name: 'content', type: 'text', required: true },
+        { name: 'timestamp', type: 'text' },
+        { name: 'model', type: 'text' },
+        { name: 'tool_calls', type: 'text' }
+    ]);
+    console.log(result.success ? '✅ Table created.' : `⚠️ ${result.message || 'Unknown result'}`);
+}
+
 async function registerSkill(client, name, version, tags, description, skillDir) {
     if (await skillExists(client, name)) {
         console.log(`⏭️  Skill "${name}" already registered.`);
@@ -174,6 +193,7 @@ Or if using the daemon:
     console.log('✅ Server is reachable.\n');
 
     await ensureSkillsTable(client);
+    await ensureMessagesTable(client);
     console.log('');
 
     const skillsToRegister = [

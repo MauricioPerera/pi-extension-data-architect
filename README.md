@@ -1,4 +1,4 @@
-# Pi Extension: Data Architect v2.0
+# Pi Extension: Data Architect v2.2
 
 Pi Extension: Data Architect empowers the AI agent to autonomously design and manage data architectures using [js-doc-store](https://www.npmjs.com/package/js-doc-store) locally or [js-doc-store-server](https://github.com/MauricioPerera/js-doc-store-server) via REST API.
 
@@ -29,6 +29,13 @@ Instead of just writing code, the agent can now build its own internal data syst
 - **Tag-Based Discovery**: Find skills by topic (`crm`, `vps`, `rag`) without knowing filenames
 - **Cross-Session Persistence**: Skills survive Pi restarts (stored in `data/skills.json`)
 - **Easy Registration**: New skill = one `arch_insert` call
+
+### New in v2.2: Conversation Memory
+- **Persistent Message History**: Every message saved to the `messages` table survives context compaction
+- **Auto-Increment Turns**: Save without specifying turn numbers; they auto-increment per conversation
+- **Recover Full Context**: After compaction, retrieve complete history with `arch_message_history`
+- **Multi-Session Recall**: Conversations persist across Pi restarts via the database
+- **Conversation Listing**: See all stored conversations with message counts
 
 ---
 
@@ -443,12 +450,33 @@ arch_query({
 
 ### 4. Session Memory with Context
 
-**Use Case:** The agent remembers context from previous conversations.
+**Use Case:** The agent remembers full conversations even after context compaction.
 
 **Prompt:**
 *"Create a memory system that persists our conversations. When I ask 'What did we discuss about the database schema last week?' find relevant previous interactions."*
 
-**Workflow:**
+**Workflow with `arch_message_save` / `arch_message_history` (v2.2+):**
+```typescript
+// After each message (auto-increments turns)
+arch_message_save({
+  conversationId: "dev-session-2026-05-11",
+  role: "user",
+  content: "We need to redesign the user table"
+})
+
+// Later, after context has been compacted
+arch_message_history({
+  conversationId: "dev-session-2026-05-11",
+  limit: 50
+})
+// Returns all 50 messages with turn numbers
+
+// List all saved conversations
+arch_conversations()
+// Returns: - dev-session-2026-05-11: 50 messages
+```
+
+**Advanced: With vector search (remote mode)**
 ```typescript
 // Each conversation turn
 arch_insert({
@@ -462,13 +490,12 @@ arch_insert({
   }
 })
 
-// With vector search (remote mode)
 const queryEmbedding = await generateEmbedding("database schema users table");
 arch_vector_search({
   collection: "conversation_vectors",
   vector: queryEmbedding,
   limit: 5,
-  matryoshka: [128, 384, 768] // Faster search
+  matryoshka: [128, 384, 768]
 })
 ```
 

@@ -917,4 +917,159 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
             };
         }
     }));
+
+    // ============================================================================
+    // CONVERSATION MEMORY TOOLS (Remote mode only)
+    // ============================================================================
+
+    pi.registerTool(defineTool({
+        name: "arch_message_save",
+        label: "Save Message",
+        description: "Persists a conversation message to the 'messages' table. Enables full history recovery after context compaction. Remote API only.",
+        parameters: Type.Object({
+            conversationId: Type.String({ description: "Unique conversation/session identifier" }),
+            role: Type.String({ description: "Role: 'user', 'assistant', or 'system'" }),
+            content: Type.String({ description: "Message content" }),
+            turn: Type.Optional(Type.Number({ description: "Turn number (auto-incremented if omitted)" })),
+            model: Type.Optional(Type.String({ description: "Model name (e.g., 'claude-sonnet')" })),
+            toolCalls: Type.Optional(Type.String({ description: "JSON-serialized tool calls if any" }))
+        }),
+        async execute(_, params) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "Conversation memory requires remote API mode." }],
+                    isError: true
+                };
+            }
+
+            let turn = params.turn;
+            if (turn === undefined) {
+                try {
+                    const prev = await apiClient.query(
+                        'messages',
+                        { conversation_id: params.conversationId },
+                        { turn: -1 },
+                        1
+                    );
+                    const data = prev.data || [];
+                    turn = data.length > 0 ? (data[0].turn || 0) + 1 : 1;
+                } catch {
+                    turn = 1;
+                }
+            }
+
+            const result = await apiClient.insert('messages', {
+                conversation_id: params.conversationId,
+                turn,
+                role: params.role,
+                content: params.content,
+                timestamp: new Date().toISOString(),
+                model: params.model || null,
+                tool_calls: params.toolCalls || null
+            });
+
+            return {
+                content: [{ type: "text", text: `Message saved (turn ${turn}, ${params.role}).` }],
+                details: { id: result.id, turn, conversationId: params.conversationId }
+            };
+        }
+    }));
+
+    pi.registerTool(defineTool({
+        name: "arch_message_history",
+        label: "Get Conversation History",
+        description: "Retrieves full message history for a conversation. Use after compaction to recover context beyond the summary. Remote API only.",
+        parameters: Type.Object({
+            conversationId: Type.String({ description: "Conversation identifier" }),
+            limit: Type.Optional(Type.Number({ description: "Max messages (default: 100)" }))
+        }),
+        async execute(_, params) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "Conversation memory requires remote API mode." }],
+                    isError: true
+                };
+            }
+
+            const result = await apiClient.query(
+                'messages',
+                { conversation_id: params.conversationId },
+                { turn: 1 },
+                params.limit || 100
+            );
+
+            const data = result.data || [];
+            const lines = data.map((m: any) =>
+                `[T${m.turn}] ${m.role}: ${m.content.substring(0, 80)}${m.content.length > 80 ? '...' : ''}`
+            ).join('\n');
+
+            return {
+                content: [{ type: "text", text: lines || `No messages found for conversation '${params.conversationId}'.` }],
+                details: { count: data.length, conversationId: params.conversationId }
+            };
+        }
+    }));
+
+    pi.registerTool(defineTool({
+        name: "arch_conversations",
+        label: "List Conversations",
+        description: "Lists all unique conversation IDs stored in the messages table with message counts. Remote API only.",
+        parameters: Type.Object({}),
+        async execute(_, __) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "Conversation memory requires remote API mode." }],
+                    isError: true
+                };
+            }
+
+            const result = await apiClient.query('messages', {}, undefined, 1000);
+            const data = result.data || [];
+
+            const grouped: Record<string, number> = {};
+            for (const m of data) {
+                const cid = m.conversation_id;
+                grouped[cid] = (grouped[cid] || 0) + 1;
+            }
+
+            const lines = Object.entries(grouped)
+                .map(([cid, count]) => `- ${cid}: ${count} messages`)
+                .join('\n');
+
+            return {
+                content: [{ type: "text", text: lines || 'No conversations found.' }],
+                details: { conversations: Object.keys(grouped), totalMessages: data.length }
+            };
+        }
+    }));
+
+    pi.registerTool(defineTool({
+        name: "arch_message_create_table",
+        label: "Create Messages Table",
+        description: "Creates the 'messages' table for conversation persistence. Run once before saving messages. Remote API only.",
+        parameters: Type.Object({}),
+        async execute(_, __) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "Remote API mode required." }],
+                    isError: true
+                };
+            }
+
+            const result = await apiClient.createTable('messages', [
+                { name: 'conversation_id', type: 'text', required: true },
+                { name: 'turn', type: 'number' },
+                { name: 'role', type: 'text', required: true },
+                { name: 'content', type: 'text', required: true },
+                { name: 'timestamp', type: 'text' },
+                { name: 'model', type: 'text' },
+                { name: 'tool_calls', type: 'text' }
+            ]);
+
+            return {
+                content: [{ type: "text", text: 'Messages table created (or already exists).' }],
+                details: result
+            };
+        }
+    }));
 }
