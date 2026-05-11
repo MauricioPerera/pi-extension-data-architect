@@ -8,6 +8,9 @@
   "pi": {
     "extensions": ["./extensions"]
   },
+  "scripts": {
+    "bootstrap": "node scripts/bootstrap.cjs"
+  },
   "dependencies": {
     "js-doc-store": "^1.0.0"
   },

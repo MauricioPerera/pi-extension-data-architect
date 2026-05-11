@@ -40,6 +40,87 @@ You can install this extension directly via the `pi` CLI:
 pi install git:https://github.com/MauricioPerera/pi-extension-data-architect
 ```
 
+> **First time using this extension?** Follow the [🟢 First-Time Setup](#-first-time-setup) guide below to bootstrap the skill registry.
+
+---
+
+## 🔰 First-Time Setup
+
+> **Assumption:** You are using `js-doc-store-server` for the **first time** and have just installed this extension.
+
+### Step 1: Start the Server
+
+Make sure `js-doc-store-server` is running. If you haven't set it up yet, clone and start it:
+
+```bash
+git clone https://github.com/MauricioPerera/js-doc-store-server.git
+cd js-doc-store-server
+npm install
+cp .env.example .env   # Edit with your secrets
+node server.js         # Or: node daemon.js start
+```
+
+Verify it's up:
+```bash
+curl http://localhost:3000/public/tables
+```
+
+### Step 2: Get a JWT Token
+
+Login with the default credentials (or use your own after registering):
+
+```bash
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"Admin123!"}'
+```
+
+Save the `token` from the response.
+
+### Step 3: Configure Pi Settings
+
+Tell the extension where your server is and how to authenticate:
+
+```bash
+pi settings set dataArchitectMode remote
+pi settings set dataArchitectApiUrl http://localhost:3000
+pi settings set dataArchitectApiToken YOUR_JWT_TOKEN
+```
+
+### Step 4: Bootstrap the Skill Registry
+
+This extension ships with 3 built-in skills (`data-architect`, `tree-operator`, `skill-registry`). Register them into the database so Pi can discover them on-demand.
+
+```bash
+cd node_modules/pi-extension-data-architect   # or wherever it was installed
+
+node scripts/bootstrap.cjs http://localhost:3000 YOUR_JWT_TOKEN
+```
+
+Or with environment variables:
+```bash
+export JS_DOC_STORE_API_URL=http://localhost:3000
+export JS_DOC_STORE_TOKEN=YOUR_JWT_TOKEN
+node scripts/bootstrap.cjs
+```
+
+> **What this does:**
+> - Creates the `skills` table if it doesn't exist
+> - Inserts the 3 built-in skills with their full markdown content
+> - Skips duplicates if you run it again
+
+### Step 5: Clean Up Your Filesystem
+
+Delete duplicate skills from `~/.agents/skills/` **except** `skill-discovery/`.
+
+```bash
+ls ~/.agents/skills/
+# Keep ONLY:  skill-discovery/
+# Delete:     data-architect/, tree-operator/, ...
+```
+
+✅ **Done.** You now have a single meta-skill on disk and the rest in the database. Pi will load `skill-discovery` and query the rest on-demand.
+
 ---
 
 ## ⚙️ Configuration
