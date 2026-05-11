@@ -1,6 +1,6 @@
 {
   "name": "pi-extension-data-architect",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "description": "Allows pi to autonomously design and manage data architectures using js-doc-store",
   "keywords": ["pi-package", "data-architect", "autonomous-db"],
   "main": "index.js",
