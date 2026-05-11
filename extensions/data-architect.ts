@@ -142,6 +142,47 @@ class ApiClient {
 }
 
 // ============================================================================
+// CLOUDFLARE AUTH HELPERS
+// ============================================================================
+
+function getCloudflareToken(): string | null {
+    // 1. Direct env var
+    if (process.env.CLOUDFLARE_API_TOKEN) return process.env.CLOUDFLARE_API_TOKEN;
+    if (process.env.WRANGLER_API_TOKEN) return process.env.WRANGLER_API_TOKEN;
+
+    // 2. Read from wrangler config
+    try {
+        const os = require('os');
+        const fs = require('fs');
+        const path = require('path');
+        const configPath = path.join(os.homedir(), '.wrangler', 'config', 'default.toml');
+        if (fs.existsSync(configPath)) {
+            const content = fs.readFileSync(configPath, 'utf-8');
+            const match = content.match(/^oauth_token\s*=\s*"(.+)"$/m);
+            if (match) return match[1].trim();
+        }
+    } catch { /* ignore */ }
+
+    return null;
+}
+
+function getCloudflareAccountId(): string | null {
+    if (process.env.CLOUDFLARE_ACCOUNT_ID) return process.env.CLOUDFLARE_ACCOUNT_ID;
+    // Try to infer from wrangler whoami output cached
+    try {
+        const os = require('os');
+        const fs = require('fs');
+        const path = require('path');
+        const whoamiPath = path.join(os.homedir(), '.wrangler', 'whoami.json');
+        if (fs.existsSync(whoamiPath)) {
+            const json = JSON.parse(fs.readFileSync(whoamiPath, 'utf-8'));
+            return json.account_id || json.accountId || null;
+        }
+    } catch { /* ignore */ }
+    return null;
+}
+
+// ============================================================================
 // CLOUDFLARE MCP CLIENT (Code Mode)
 // ============================================================================
 
@@ -1159,13 +1200,14 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
         description: "Busca endpoints en la API de Cloudflare escribiendo JavaScript contra el spec OpenAPI. Usa el MCP server de Cloudflare en Code Mode. Requiere CLOUDFLARE_API_TOKEN en env o settings.",
         parameters: Type.Object({
             code: Type.String({ description: "Código JS async que explora spec.paths. Ej: async () => { const results = []; for (const [path, methods] of Object.entries(spec.paths)) { if (path.includes('/workers')) results.push(path); } return results; }" }),
-            account_id: Type.Optional(Type.String({ description: "Cloudflare account ID (requerido para user tokens)" }))
+            account_id: Type.Optional(Type.String({ description: "Cloudflare account ID (opcional, se autodetecta desde wrangler si está logueado)" }))
         }),
         async execute(params, _) {
-            const token = process.env.CLOUDFLARE_API_TOKEN || pi.settings?.get?.('cloudflareApiToken');
+            const token = getCloudflareToken() || pi.settings?.get?.('cloudflareApiToken');
+            const autoAccountId = getCloudflareAccountId();
             if (!token) {
                 return {
-                    content: [{ type: "text", text: "Falta CLOUDFLARE_API_TOKEN. Configúralo en .env del server o en settings de Pi." }],
+                    content: [{ type: "text", text: "Falta CLOUDFLARE_API_TOKEN. Wrangler está autenticado? Ejecutá `wrangler login` para obtener OAuth token, o configurá CLOUDFLARE_API_TOKEN en env." }],
                     isError: true
                 };
             }
@@ -1174,7 +1216,7 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
                 const mcp = new CloudflareMCPClient(token);
                 const result = await mcp.callTool('search', {
                     code: params.code,
-                    ...(params.account_id ? { account_id: params.account_id } : {})
+                    ...(params.account_id ? { account_id: params.account_id } : (autoAccountId ? { account_id: autoAccountId } : {}))
                 });
 
                 const content = result?.content || [];
@@ -1199,13 +1241,14 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
         description: "Ejecuta código JavaScript contra la API de Cloudflare usando el MCP server. El código recibe cloudflare.request() y accountId. Usa Code Mode.",
         parameters: Type.Object({
             code: Type.String({ description: "Código JS async que llama a la API. Ej: async () => { const r = await cloudflare.request({ method: 'GET', path: `/accounts/${accountId}/workers/scripts` }); return r.result; }" }),
-            account_id: Type.Optional(Type.String({ description: "Cloudflare account ID" }))
+            account_id: Type.Optional(Type.String({ description: "Cloudflare account ID (opcional, se autodetecta desde wrangler si está logueado)" }))
         }),
         async execute(params, _) {
-            const token = process.env.CLOUDFLARE_API_TOKEN || pi.settings?.get?.('cloudflareApiToken');
+            const token = getCloudflareToken() || pi.settings?.get?.('cloudflareApiToken');
+            const autoAccountId = getCloudflareAccountId();
             if (!token) {
                 return {
-                    content: [{ type: "text", text: "Falta CLOUDFLARE_API_TOKEN. Ve a https://dash.cloudflare.com/profile/api-tokens para crear uno." }],
+                    content: [{ type: "text", text: "Falta CLOUDFLARE_API_TOKEN. Wrangler está autenticado? Ejecutá `wrangler login` para obtener OAuth token, o configurá CLOUDFLARE_API_TOKEN en env." }],
                     isError: true
                 };
             }
@@ -1214,7 +1257,7 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
                 const mcp = new CloudflareMCPClient(token);
                 const result = await mcp.callTool('execute', {
                     code: params.code,
-                    ...(params.account_id ? { account_id: params.account_id } : {})
+                    ...(params.account_id ? { account_id: params.account_id } : (autoAccountId ? { account_id: autoAccountId } : {}))
                 });
 
                 const content = result?.content || [];
