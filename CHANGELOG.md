@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.3.0] - 2026-05-11
+### Added
+- **Cloudflare MCP Integration**: Pi can now call Cloudflare's MCP server directly via two new native tools — no separate MCP client app required.
+  - `arch_cf_mcp_search`: Sends JS to explore Cloudflare's OpenAPI spec (Code Mode `search` tool).
+  - `arch_cf_mcp_execute`: Sends JS to call Cloudflare API via `cloudflare.request()` (Code Mode `execute` tool).
+  - Internally speaks JSON-RPC 2.0 over HTTP to `https://mcp.cloudflare.com/mcp`.
+  - Requires `CLOUDFLARE_API_TOKEN` environment variable or Pi setting.
+
 ## [2.2.0] - 2026-05-11
 ### Added
 - **Conversation Memory**: Store every message in `messages` table to survive context compaction.

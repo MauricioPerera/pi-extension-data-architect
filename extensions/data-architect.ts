@@ -142,6 +142,82 @@ class ApiClient {
 }
 
 // ============================================================================
+// CLOUDFLARE MCP CLIENT (Code Mode)
+// ============================================================================
+
+class CloudflareMCPClient {
+    private baseUrl = 'https://mcp.cloudflare.com/mcp';
+    private sessionId: string | null = null;
+    private initialized = false;
+
+    constructor(private apiToken: string) {}
+
+    private async mcpRequest(body: any): Promise<any> {
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiToken}`
+        };
+        if (this.sessionId) {
+            headers['mcp-session-id'] = this.sessionId;
+        }
+
+        const resp = await fetch(this.baseUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body)
+        });
+
+        const sess = resp.headers.get('mcp-session-id');
+        if (sess) this.sessionId = sess;
+
+        const text = await resp.text();
+        if (!resp.ok) throw new Error(`MCP error ${resp.status}: ${text}`);
+
+        try { return JSON.parse(text); }
+        catch { return { text, ok: resp.ok }; }
+    }
+
+    async initialize(): Promise<void> {
+        if (this.initialized) return;
+
+        const init = await this.mcpRequest({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: {
+                protocolVersion: '2024-11-05',
+                capabilities: { sampling: {}, roots: { listChanged: true } },
+                clientInfo: { name: 'pi-extension-data-architect', version: '2.2.0' }
+            }
+        });
+
+        if (init.error) throw new Error(`MCP init failed: ${init.error.message}`);
+
+        await this.mcpRequest({
+            jsonrpc: '2.0',
+            method: 'notifications/initialized',
+            params: {}
+        });
+
+        this.initialized = true;
+    }
+
+    async callTool(name: string, args: Record<string, any>): Promise<any> {
+        await this.initialize();
+
+        const result = await this.mcpRequest({
+            jsonrpc: '2.0',
+            id: Math.floor(Math.random() * 1000000),
+            method: 'tools/call',
+            params: { name, arguments: args }
+        });
+
+        if (result.error) throw new Error(`Tool error: ${result.error.message}`);
+        return result.result;
+    }
+}
+
+// ============================================================================
 // EXTENSION
 // ============================================================================
 
@@ -1070,6 +1146,90 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
                 content: [{ type: "text", text: 'Messages table created (or already exists).' }],
                 details: result
             };
+        }
+    }));
+
+    // ============================================================================
+    // CLOUDFLARE MCP TOOLS
+    // ============================================================================
+
+    pi.registerTool(defineTool({
+        name: "arch_cf_mcp_search",
+        label: "Cloudflare MCP Search",
+        description: "Busca endpoints en la API de Cloudflare escribiendo JavaScript contra el spec OpenAPI. Usa el MCP server de Cloudflare en Code Mode. Requiere CLOUDFLARE_API_TOKEN en env o settings.",
+        parameters: Type.Object({
+            code: Type.String({ description: "Código JS async que explora spec.paths. Ej: async () => { const results = []; for (const [path, methods] of Object.entries(spec.paths)) { if (path.includes('/workers')) results.push(path); } return results; }" }),
+            account_id: Type.Optional(Type.String({ description: "Cloudflare account ID (requerido para user tokens)" }))
+        }),
+        async execute(params, _) {
+            const token = process.env.CLOUDFLARE_API_TOKEN || pi.settings?.get?.('cloudflareApiToken');
+            if (!token) {
+                return {
+                    content: [{ type: "text", text: "Falta CLOUDFLARE_API_TOKEN. Configúralo en .env del server o en settings de Pi." }],
+                    isError: true
+                };
+            }
+
+            try {
+                const mcp = new CloudflareMCPClient(token);
+                const result = await mcp.callTool('search', {
+                    code: params.code,
+                    ...(params.account_id ? { account_id: params.account_id } : {})
+                });
+
+                const content = result?.content || [];
+                const text = content.map((c: any) => c.text).join('\n') || JSON.stringify(result, null, 2);
+
+                return {
+                    content: [{ type: "text", text: `Cloudflare MCP Search result:\n\n${text}` }],
+                    details: result
+                };
+            } catch (e: any) {
+                return {
+                    content: [{ type: "text", text: `Error MCP: ${e.message}` }],
+                    isError: true
+                };
+            }
+        }
+    }));
+
+    pi.registerTool(defineTool({
+        name: "arch_cf_mcp_execute",
+        label: "Cloudflare MCP Execute",
+        description: "Ejecuta código JavaScript contra la API de Cloudflare usando el MCP server. El código recibe cloudflare.request() y accountId. Usa Code Mode.",
+        parameters: Type.Object({
+            code: Type.String({ description: "Código JS async que llama a la API. Ej: async () => { const r = await cloudflare.request({ method: 'GET', path: `/accounts/${accountId}/workers/scripts` }); return r.result; }" }),
+            account_id: Type.Optional(Type.String({ description: "Cloudflare account ID" }))
+        }),
+        async execute(params, _) {
+            const token = process.env.CLOUDFLARE_API_TOKEN || pi.settings?.get?.('cloudflareApiToken');
+            if (!token) {
+                return {
+                    content: [{ type: "text", text: "Falta CLOUDFLARE_API_TOKEN. Ve a https://dash.cloudflare.com/profile/api-tokens para crear uno." }],
+                    isError: true
+                };
+            }
+
+            try {
+                const mcp = new CloudflareMCPClient(token);
+                const result = await mcp.callTool('execute', {
+                    code: params.code,
+                    ...(params.account_id ? { account_id: params.account_id } : {})
+                });
+
+                const content = result?.content || [];
+                const text = content.map((c: any) => c.text).join('\n') || JSON.stringify(result, null, 2);
+
+                return {
+                    content: [{ type: "text", text: `Cloudflare MCP Execute result:\n\n${text}` }],
+                    details: result
+                };
+            } catch (e: any) {
+                return {
+                    content: [{ type: "text", text: `Error MCP execute: ${e.message}` }],
+                    isError: true
+                };
+            }
         }
     }));
 }
