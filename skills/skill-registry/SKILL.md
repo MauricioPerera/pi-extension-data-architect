@@ -1,3 +1,11 @@
+---
+name: skill-registry
+version: 2.1.0
+tags: skills,registry,discovery,meta-pattern,architecture
+description: Meta-skill pattern for dynamic skill discovery. Keep only ONE SKILL.md on filesystem; query all specialized skills on-demand from js-doc-store-server by tags.
+author: MauricioPerera
+---
+
 # Skill Registry — Dynamic Skill Discovery
 
 This skill enables **Pi** to use `js-doc-store-server` as a dynamic skill registry. Instead of keeping dozens of `SKILL.md` files scattered in `~/.agents/skills/`, only **one** meta-skill lives on the filesystem. All functional skills are stored in the `skills` table and discovered on-demand via tag-based queries.

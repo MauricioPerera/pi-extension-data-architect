@@ -1,11 +1,9 @@
 ---
 name: memory-management
-version: 1.0.0
-tags: memory,conversation,persistence,context,recovery,messages,compaction
+version: 2.2.1
+tags: memory,conversation,persistence,context,recovery,messages,compaction,arch-message,skill
 author: MauricioPerera
-description: >
-  Documentation and workflow for persisting Pi conversation messages to js-doc-store-server.
-  Survives context compaction. Covers schema, saving, querying, and recovery.
+description: Persist Pi conversation messages to js-doc-store-server. Auto-incremented turns, recovery after compaction, admin queries, best practices. v2.2.1 with 4 core tools.
 ---
 
 # Memory Management Skill
