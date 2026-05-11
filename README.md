@@ -58,9 +58,58 @@ pi settings set dataArchitectDir /path/to/data
 |---------|-----------|-------------|
 | Storage | Local JSON files | Cloudflare Workers + KV |
 | Vector Search | ❌ Not available | ✅ Full support |
+| RAG Sin Vectores | ✅ Reasoning Tree | ✅ Reasoning Tree + Vectores |
 | Authentication | Not needed | JWT required |
 | Persistence | Local only | Cloud persistent |
 | Network | Offline capable | Requires internet |
+
+---
+
+## 📄 RAG Sin Vectores con Reasoning Tree
+
+**La extensión implementa RAG (Retrieval-Augmented Generation) SIN vectores usando el enfoque Reasoning Tree.**
+
+### ¿Cómo funciona?
+
+En lugar de usar embeddings y búsqueda vectorial, el **árbol jerárquico ES el índice de retrieval**:
+
+```
+Root (level 0, summary: "Documentación Técnica")
+ └─ Branch (level 1, summary: "Autenticación JWT y OAuth2")
+     ├─ Branch (level 2, summary: "Implementación de tokens")
+     │   ├─ Leaf: "Refresh tokens con expiry"
+     │   └─ Leaf: "Revocación de sesiones"
+     └─ Branch (level 2, summary: "Flujos OAuth2")
+```
+
+### Retrieval por Navegación Jerárquica
+
+1. **Root**: Query `level: 0` → Encontrar dominio general
+2. **Branch**: Query `parent_id: root._id` → Analizar summaries → Elegir rama
+3. **Leaf**: Query `parent_id: branch._id` → Obtener contenido específico
+4. **Contexto**: Root summary + Branch summary + Leaf content = Contexto completo para LLM
+
+### Comparación: Vectores vs Reasoning Tree
+
+| Característica | Vector RAG | Reasoning Tree RAG |
+|---------------|-----------|-------------------|
+| **Índice** | Espacio vectorial | Jerarquía de nodos |
+| **Retrieval** | KNN por similitud | Navegación parent→child |
+| **Contexto** | Snippets relacionados | Ruta completa + summaries |
+| **Embeddings** | Requeridos (AI/ML) | No requeridos (summaries humanos) |
+| **Dependencies** | API embeddings | Zero dependencies |
+| **Explicabilidad** | Caja negra | Ruta transparente |
+
+### Herramientas para RAG Sin Vectores
+
+| Herramienta | Uso |
+|------------|-----|
+| `arch_query` + `level: 0` | Encontrar raíces del árbol |
+| `arch_query` + `parent_id: X` | Navegar a hijos de un nodo |
+| `arch_query` + `summary: { $regex: ... }` | Buscar por resumen semántico |
+| `arch_tree_navigate` (nueva) | Navegación automática con contexto ensamblado |
+
+**Ver `skills/tree-operator/SKILL.md` para el workflow completo de navegación.**
 
 ---
 

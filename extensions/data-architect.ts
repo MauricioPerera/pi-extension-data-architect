@@ -31,12 +31,13 @@ const DEFAULT_API_URL = 'https://js-doc-store-server.rckflr.workers.dev';
 // ============================================================================
 
 function getMode(settings: any): { mode: 'local' | 'remote', apiUrl?: string, token?: string } {
-    const mode = settings.get('dataArchitectMode') || 'local';
+    const getSetting = (key: string) => settings?.get ? settings.get(key) : settings?.[key];
+    const mode = getSetting('dataArchitectMode') || 'local';
     if (mode === 'remote') {
         return {
             mode: 'remote',
-            apiUrl: settings.get('dataArchitectApiUrl') || DEFAULT_API_URL,
-            token: settings.get('dataArchitectApiToken')
+            apiUrl: getSetting('dataArchitectApiUrl') || DEFAULT_API_URL,
+            token: getSetting('dataArchitectApiToken')
         };
     }
     return { mode: 'local' };
@@ -145,9 +146,17 @@ class ApiClient {
 // ============================================================================
 
 export default function dataArchitectExtension(pi: ExtensionAPI) {
-    // Get configuration
-    const DATA_DIR = pi.settings.get('dataArchitectDir') || DEFAULT_DATA_DIR;
-    const modeConfig = getMode(pi.settings);
+    // Get configuration - handle undefined pi.settings
+    const settings = pi?.settings || {};
+    const getSetting = (key: string, fallback: string) => {
+        if (settings.get) {
+            return settings.get(key) || fallback;
+        }
+        return settings[key] || fallback;
+    };
+
+    const DATA_DIR = getSetting('dataArchitectDir', DEFAULT_DATA_DIR);
+    const modeConfig = getMode(settings);
 
     // Local mode: Initialize js-doc-store
     let jsDocStore: any;
@@ -414,6 +423,121 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
                     details: { tables }
                 };
             }
+        }
+    }));
+
+    // ============================================================================
+    // REASONING TREE TOOLS (RAG Without Vectors)
+    // ============================================================================
+
+    pi.registerTool(defineTool({
+        name: "arch_tree_navigate",
+        label: "Tree Navigation (RAG)",
+        description: "Navigate hierarchical Reasoning Tree for RAG retrieval. Descends from root → branch → leaf, assembling full context (summaries + content). No vectors required.",
+        parameters: Type.Object({
+            tableName: Type.String({ description: "Table containing the tree structure" }),
+            rootId: Type.Optional(Type.String({ description: "Starting root node ID (default: find by keyword)" })),
+            keyword: Type.Optional(Type.String({ description: "Keyword to search in summaries for navigation" })),
+            maxDepth: Type.Optional(Type.Number({ description: "Maximum depth to traverse (default: 5)" }))
+        }),
+        async execute(_, params) {
+            const { tableName, rootId, keyword, maxDepth = 5 } = params;
+
+            async function getNode(nodeId: string) {
+                if (apiClient) {
+                    const result = await apiClient.query(tableName, { _id: nodeId }, undefined, 1);
+                    const data = result.data || result;
+                    return Array.isArray(data) ? data[0] : data;
+                } else {
+                    const table = getTable(tableName);
+                    return table.find({ _id: nodeId }).toArray()[0];
+                }
+            }
+
+            async function getChildren(parentId: string | null) {
+                if (apiClient) {
+                    const result = await apiClient.query(tableName, { parent_id: parentId });
+                    return result.data || result || [];
+                } else {
+                    const table = getTable(tableName);
+                    return table.find({ parent_id: parentId }).toArray();
+                }
+            }
+
+            // Find root if not specified
+            let currentRoot = rootId;
+            if (!currentRoot) {
+                const roots = await getChildren(null);
+                if (keyword) {
+                    currentRoot = roots.find((r: any) =>
+                        r.summary?.toLowerCase().includes(keyword.toLowerCase()) ||
+                        r.title?.toLowerCase().includes(keyword.toLowerCase())
+                    )?._id;
+                }
+                if (!currentRoot && roots.length > 0) {
+                    currentRoot = roots[0]._id;
+                }
+            }
+
+            if (!currentRoot) {
+                return {
+                    content: [{ type: "text", text: "No root node found for navigation." }],
+                    isError: true
+                };
+            }
+
+            // Navigate tree and build context
+            const navigationPath: any[] = [];
+            let currentNode = await getNode(currentRoot);
+            let depth = 0;
+
+            while (currentNode && depth < maxDepth) {
+                navigationPath.push({
+                    level: currentNode.level || depth,
+                    id: currentNode._id,
+                    title: currentNode.title,
+                    summary: currentNode.summary,
+                    content: currentNode.content
+                });
+
+                // Find most relevant child based on keyword
+                const children = await getChildren(currentNode._id);
+                if (children.length === 0) break;
+
+                if (keyword) {
+                    const matchedChild = children.find((c: any) =>
+                        c.summary?.toLowerCase().includes(keyword.toLowerCase()) ||
+                        c.title?.toLowerCase().includes(keyword.toLowerCase())
+                    );
+                    currentNode = matchedChild || children[0];
+                } else {
+                    currentNode = children[0];
+                }
+                depth++;
+            }
+
+            // Assemble RAG context
+            const root = navigationPath[0];
+            const leaf = navigationPath[navigationPath.length - 1];
+            const context = {
+                root_summary: root?.summary,
+                branch_summaries: navigationPath.slice(1, -1).map((n: any) => n.summary).join(' → '),
+                leaf_content: leaf?.content,
+                full_path: navigationPath.map((n: any) => n.title).join(' → '),
+                all_nodes: navigationPath
+            };
+
+            return {
+                content: [{
+                    type: "text",
+                    text: `RAG Context Retrieved:\n\n` +
+                          `**Root:** ${root?.summary}\n\n` +
+                          `**Path:** ${context.full_path}\n\n` +
+                          `**Content:**\n${leaf?.content || 'No content at leaf'}\n\n` +
+                          `**Full Context for LLM:**\n${JSON.stringify(context, null, 2)}`
+                }],
+                details: context
+            };
         }
     }));
 

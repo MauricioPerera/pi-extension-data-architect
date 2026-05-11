@@ -2,6 +2,22 @@
 
 This skill provides the operational framework for managing hierarchical data architectures. The agent is not just performing CRUD operations, but maintaining a **Reasoning Tree** where the structure itself is a map of knowledge.
 
+## 🔍 RAG Without Vectors (Core Philosophy)
+
+**This skill implements Retrieval-Augmented Generation WITHOUT embeddings or vectors.** The Reasoning Tree itself is the retrieval index.
+
+| Vector RAG | Reasoning Tree RAG |
+|-----------|-------------------|
+| Query → Embedding → KNN → Docs | Query → Tree Navigation → Docs |
+| Flat vector space | Hierarchical summaries |
+| Semantic similarity (ML) | Structural + text matching |
+| Requires AI/ML API | Zero dependencies |
+| Context: related snippets | Context: full path + summaries |
+
+**The tree IS the index. The summaries ARE the embeddings (human-made).**
+
+This approach is implemented in js-doc-store-server. See the server README section "RAG Sin Vectores" for details.
+
 ## 🎯 Core Philosophy
 The data is organized as a tree (Root $\rightarrow$ Branch $\rightarrow$ Leaf). The value of this architecture lies in the **summaries** at each level. If the data at the bottom (Leaf) changes, the information at the top (Branch) may change. The operator must maintain this **semantic consistency**.
 
