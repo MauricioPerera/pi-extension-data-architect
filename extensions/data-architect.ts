@@ -766,4 +766,155 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
             };
         }
     }));
+
+    // ============================================================================
+    // SKILL REGISTRY TOOLS (Remote mode only)
+    // ============================================================================
+
+    pi.registerTool(defineTool({
+        name: "arch_skill_register",
+        label: "Register Skill from File",
+        description: "Reads a SKILL.md file and registers it in the dynamic skill registry table. Remote API mode only.",
+        parameters: Type.Object({
+            filePath: Type.String({ description: "Path to the SKILL.md file" }),
+            name: Type.String({ description: "Skill identifier (e.g., 'vps-management')" }),
+            version: Type.Optional(Type.String({ description: "Semantic version (default: 1.0.0)" })),
+            tags: Type.Optional(Type.String({ description: "Comma-separated tags for discovery" })),
+            description: Type.Optional(Type.String({ description: "Brief description for listings" }))
+        }),
+        async execute(_, params) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "Skill registry requires remote API mode." }],
+                    isError: true
+                };
+            }
+
+            const fs = require('fs');
+            const path = require('path');
+
+            if (!fs.existsSync(params.filePath)) {
+                return {
+                    content: [{ type: "text", text: `File not found: ${params.filePath}` }],
+                    isError: true
+                };
+            }
+
+            const content = fs.readFileSync(params.filePath, 'utf-8');
+            const titleMatch = content.match(/^# (.+)$/m);
+            const name = params.name || path.basename(path.dirname(params.filePath));
+            const version = params.version || '1.0.0';
+            const tags = params.tags || name;
+            const description = params.description || (titleMatch ? titleMatch[1] : name);
+
+            const result = await apiClient.insert('skills', {
+                name,
+                version,
+                tags,
+                description,
+                content
+            });
+
+            return {
+                content: [{ type: "text", text: `Skill '${name}' registered as version ${version}.` }],
+                details: { id: result.id, name, version }
+            };
+        }
+    }));
+
+    pi.registerTool(defineTool({
+        name: "arch_skill_discover",
+        label: "Discover Skills by Tag",
+        description: "Query the skill registry by tags to find relevant skills. Returns name, version, and description (not full content).",
+        parameters: Type.Object({
+            tagQuery: Type.String({ description: "Tag or keyword to search for (e.g., 'vps', 'crm', 'rag')" }),
+            limit: Type.Optional(Type.Number({ description: "Max results (default: 10)" }))
+        }),
+        async execute(_, params) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "Skill discovery requires remote API mode." }],
+                    isError: true
+                };
+            }
+
+            const result = await apiClient.query(
+                'skills',
+                { tags: { $regex: params.tagQuery } },
+                undefined,
+                params.limit || 10
+            );
+
+            const data = result.data || [];
+            const text = data.map((s: any, i: number) =>
+                `${i + 1}. ${s.name} v${s.version}\n   ${s.description}`
+            ).join('\n');
+
+            return {
+                content: [{ type: "text", text: text || `No skills found for tag '${params.tagQuery}'.` }],
+                details: { count: data.length, skills: data.map((s: any) => ({ name: s.name, version: s.version, tags: s.tags, description: s.description })) }
+            };
+        }
+    }));
+
+    pi.registerTool(defineTool({
+        name: "arch_skill_load",
+        label: "Load Skill Content",
+        description: "Retrieve the full content (SKILL.md text) of a skill by name for context injection.",
+        parameters: Type.Object({
+            name: Type.String({ description: "Skill name (e.g., 'data-architect')" })
+        }),
+        async execute(_, params) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "Skill loading requires remote API mode." }],
+                    isError: true
+                };
+            }
+
+            const result = await apiClient.query('skills', { name: params.name }, undefined, 1);
+            const data = result.data || [];
+
+            if (data.length === 0) {
+                return {
+                    content: [{ type: "text", text: `Skill '${params.name}' not found in registry.` }],
+                    isError: true
+                };
+            }
+
+            const skill = data[0];
+            return {
+                content: [{ type: "text", text: skill.content }],
+                details: { name: skill.name, version: skill.version, tags: skill.tags, contentLength: skill.content.length }
+            };
+        }
+    }));
+
+    pi.registerTool(defineTool({
+        name: "arch_skill_create_table",
+        label: "Create Skill Registry Table",
+        description: "Creates the 'skills' table in js-doc-store-server if it doesn't exist. Required before registering skills.",
+        parameters: Type.Object({}),
+        async execute(_, __) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "Remote API mode required." }],
+                    isError: true
+                };
+            }
+
+            const result = await apiClient.createTable('skills', [
+                { name: 'name', type: 'text', required: true },
+                { name: 'version', type: 'text' },
+                { name: 'tags', type: 'text' },
+                { name: 'description', type: 'text' },
+                { name: 'content', type: 'text', required: true }
+            ]);
+
+            return {
+                content: [{ type: "text", text: "Skill registry table 'skills' created (or already exists)." }],
+                details: result
+            };
+        }
+    }));
 }

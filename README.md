@@ -22,6 +22,14 @@ Instead of just writing code, the agent can now build its own internal data syst
 - **Cross-Collection Search**: Search across multiple collections simultaneously
 - **Matryoshka Search**: Multi-stage dimensional search for efficiency
 
+### New in v2.1: Dynamic Skill Registry
+- **Meta-Skill Pattern**: Keep only ONE `SKILL.md` on the filesystem (`skill-discovery`)
+- **On-Demand Loading**: Query the `skills` table by tags to inject only relevant context
+- **Versioning**: Track skill evolution with a `version` field
+- **Tag-Based Discovery**: Find skills by topic (`crm`, `vps`, `rag`) without knowing filenames
+- **Cross-Session Persistence**: Skills survive Pi restarts (stored in `data/skills.json`)
+- **Easy Registration**: New skill = one `arch_insert` call
+
 ---
 
 ## 🚀 Installation
@@ -547,6 +555,9 @@ Guidance on how to design a cohesive data system from a user's request:
 
 ### Tree Operator Skill
 A specialized methodology for managing "Reasoning Trees". It teaches the agent to navigate documents by descending through hierarchical summaries rather than performing flat searches, ensuring high precision and traceability.
+
+### Skill Registry
+A meta-architecture pattern that transforms `js-doc-store-server` into a **dynamic skill registry**. Instead of loading all `SKILL.md` files from the filesystem at startup, Pi keeps only ONE meta-skill (`skill-discovery`) on disk and discovers all specialized skills on-demand via tag-based queries. This dramatically reduces context overhead and enables versioning, search, and cross-session persistence. See `skills/skill-registry/SKILL.md` for the full workflow, migration script, and benefits.
 
 ---
 
