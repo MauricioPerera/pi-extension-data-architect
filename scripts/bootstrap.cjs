@@ -124,28 +124,29 @@ async function ensureMessagesTable(client) {
     console.log(result.success ? '✅ Table created.' : `⚠️ ${result.message || 'Unknown result'}`);
 }
 
-async function registerSkill(client, name, version, tags, description, skillDir) {
-    if (await skillExists(client, name)) {
-        console.log(`⏭️  Skill "${name}" already registered.`);
-        return;
+// Parse YAML frontmatter from SKILL.md
+function parseFrontmatter(raw) {
+    const match = raw.match(/^---\n([\s\S]*?)\n---\n/);
+    if (!match) return {};
+    const lines = match[1].split('\n');
+    const meta = {};
+    let currentKey = null;
+    for (const line of lines) {
+        if (line.startsWith(' ') || line.startsWith('\t')) {
+            if (currentKey) meta[currentKey] += ' ' + line.trim();
+        } else {
+            const colonIdx = line.indexOf(':');
+            if (colonIdx > 0) {
+                currentKey = line.slice(0, colonIdx).trim();
+                meta[currentKey] = line.slice(colonIdx + 1).trim();
+            }
+        }
     }
+    return meta;
+}
 
-    const skillFile = path.join(__dirname, '..', 'skills', skillDir, 'SKILL.md');
-    if (!fs.existsSync(skillFile)) {
-        console.error(`❌ Skill file not found: ${skillFile}`);
-        return;
-    }
-
-    const content = fs.readFileSync(skillFile, 'utf-8');
-    console.log(`Registering "${name}"...`);
-    const result = await client.insert('skills', {
-        name,
-        version,
-        tags,
-        description,
-        content
-    });
-    console.log(result.success ? `✅ Registered: ${name}` : `❌ Failed: ${name}`);
+function stripFrontmatter(raw) {
+    return raw.replace(/^---\n[\s\S]*?\n---\n/, '');
 }
 
 async function main() {
@@ -196,32 +197,32 @@ Or if using the daemon:
     await ensureMessagesTable(client);
     console.log('');
 
-    const skillsToRegister = [
-        {
-            name: 'data-architect',
-            version: '2.0.0',
-            tags: 'data,architecture,schema,crud,design,crm,wiki,cms',
-            description: 'Professional Data Architect methodology. Includes entity analysis, schema design, implementation workflow, and prebuilt patterns (CRM, Wiki, Inventory).',
-            dir: 'data-architect'
-        },
-        {
-            name: 'tree-operator',
-            version: '2.0.0',
-            tags: 'rag,tree,reasoning,knowledge,hierarchy,navigation,semantic',
-            description: 'RAG without embeddings using hierarchical Reasoning Trees. Navigate Root→Branch→Leaf, maintain summaries, and retrieve via structure rather than vectors.',
-            dir: 'tree-operator'
-        },
-        {
-            name: 'skill-registry',
-            version: '2.1.0',
-            tags: 'skills,registry,discovery,meta-pattern,architecture',
-            description: 'Meta-skill pattern for dynamic skill discovery. Keep only ONE SKILL.md on filesystem; query all specialized skills on-demand from js-doc-store-server by tags.',
-            dir: 'skill-registry'
-        }
-    ];
+    // Dynamically discover all skills in skills/ directory
+    const skillsDir = path.join(__dirname, '..', 'skills');
+    const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+    const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
 
-    for (const skill of skillsToRegister) {
-        await registerSkill(client, skill.name, skill.version, skill.tags, skill.description, skill.dir);
+    for (const dir of dirs) {
+        const skillFile = path.join(skillsDir, dir, 'SKILL.md');
+        if (!fs.existsSync(skillFile)) continue;
+
+        const raw = fs.readFileSync(skillFile, 'utf-8');
+        const meta = parseFrontmatter(raw);
+        const content = stripFrontmatter(raw);
+
+        const name = meta.name || dir;
+        const version = meta.version || '1.0.0';
+        const tags = meta.tags || dir;
+        const description = (meta.description || meta.summary || `Skill ${name}`).replace(/\s+/g, ' ').trim();
+
+        if (await skillExists(client, name)) {
+            console.log(`⏭️  Skill "${name}" already registered.`);
+            continue;
+        }
+
+        console.log(`Registering "${name}"...`);
+        const result = await client.insert('skills', { name, version, tags, description, content });
+        console.log(result.success ? `✅ Registered: ${name}` : `❌ Failed: ${name}`);
     }
 
     console.log('\n🎉 Bootstrap complete!');
