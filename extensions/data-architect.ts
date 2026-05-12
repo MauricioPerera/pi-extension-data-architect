@@ -1237,40 +1237,66 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
     }));
 
     pi.registerTool(defineTool({
-        name: "arch_cf_mcp_execute",
-        label: "Cloudflare MCP Execute",
-        description: "Ejecuta código JavaScript contra la API de Cloudflare usando el MCP server. El código recibe cloudflare.request() y accountId. Usa Code Mode.",
+        name: "arch_cf_embed",
+        label: "Cloudflare Workers AI Embed",
+        description: "Genera embeddings usando Workers AI (Gemma embedding) via un Worker privado. Requiere GEMMA_EMBED_URL y GEMMA_EMBED_API_KEY en variables de entorno. Soporta Matryoshka y cuantización binaria.",
         parameters: Type.Object({
-            code: Type.String({ description: "Código JS async que llama a la API. Ej: async () => { const r = await cloudflare.request({ method: 'GET', path: `/accounts/${accountId}/workers/scripts` }); return r.result; }" }),
-            account_id: Type.Optional(Type.String({ description: "Cloudflare account ID (opcional, se autodetecta desde wrangler si está logueado)" }))
+            text: Type.String({ description: "Texto a vectorizar" }),
+            texts: Type.Optional(Type.Array(Type.String(), { description: "Array de textos (batch)" })),
+            dimensions: Type.Optional(Type.Number({ description: "Dimensiones Matryoshka (64, 128, 256, 512, 768, 1024, 1536, 2048). Default: 768" })),
+            normalize: Type.Optional(Type.Boolean({ description: "Normalizar vectores (default: true)" })),
+            binary: Type.Optional(Type.Boolean({ description: "Incluir cuantización binaria (default: true)" })),
+            endpoint: Type.Optional(Type.String({ description: "Sobrescribe GEMMA_EMBED_URL (ruta relativa: /embed, /embed/matryoshka, /embed/multilingual)" }))
         }),
         async execute(params, _) {
-            const token = getCloudflareToken() || pi.settings?.get?.('cloudflareApiToken');
-            const autoAccountId = getCloudflareAccountId();
-            if (!token) {
+            const embedUrl = process.env.GEMMA_EMBED_URL || pi.settings?.get?.('gemmaEmbedUrl');
+            const apiKey = process.env.GEMMA_EMBED_API_KEY || pi.settings?.get?.('gemmaEmbedApiKey');
+
+            if (!embedUrl || !apiKey) {
                 return {
-                    content: [{ type: "text", text: "Falta CLOUDFLARE_API_TOKEN. Wrangler está autenticado? Ejecutá `wrangler login` para obtener OAuth token, o configurá CLOUDFLARE_API_TOKEN en env." }],
+                    content: [{ type: "text", text: "Faltan credenciales de embedding. Configurá GEMMA_EMBED_URL y GEMMA_EMBED_API_KEY en env o settings de Pi." }],
                     isError: true
                 };
             }
 
+            const path = params.endpoint || (params.dimensions ? '/embed/matryoshka' : '/embed');
+            const url = embedUrl.replace(/\/$/, '') + path;
+
+            const body: any = {};
+            if (params.texts) body.texts = params.texts;
+            else body.text = params.text;
+            if (params.dimensions) body.dimensions = params.dimensions;
+            if (params.normalize !== undefined) body.normalize = params.normalize;
+            if (params.binary !== undefined) body.binary = params.binary;
+
             try {
-                const mcp = new CloudflareMCPClient(token);
-                const result = await mcp.callTool('execute', {
-                    code: params.code,
-                    ...(params.account_id ? { account_id: params.account_id } : (autoAccountId ? { account_id: autoAccountId } : {}))
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(body)
                 });
 
-                const content = result?.content || [];
-                const text = content.map((c: any) => c.text).join('\n') || JSON.stringify(result, null, 2);
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    return {
+                        content: [{ type: "text", text: `Error ${resp.status}: ${data.message || data.error || 'Embedding request failed'}` }],
+                        isError: true
+                    };
+                }
+
+                const vecs = data.embeddings || [];
+                const summary = vecs.map((v: any) => `  - "${v.text?.substring(0, 40)}..." → [${v.dimensions} dims]${v.binary ? ' + binary' : ''}`).join('\n');
 
                 return {
-                    content: [{ type: "text", text: `Cloudflare MCP Execute result:\n\n${text}` }],
-                    details: result
+                    content: [{ type: "text", text: `Embeddings generados: ${data.count}\nModelo: ${data.model || 'N/A'}\nDimensions: ${data.dimensions || data.matryoshkaDimensions || 'N/A'}\n${summary}` }],
+                    details: data
                 };
             } catch (e: any) {
                 return {
-                    content: [{ type: "text", text: `Error MCP execute: ${e.message}` }],
+                    content: [{ type: "text", text: `Error de conexión: ${e.message}` }],
                     isError: true
                 };
             }
