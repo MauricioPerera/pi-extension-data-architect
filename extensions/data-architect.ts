@@ -196,6 +196,7 @@ class CloudflareMCPClient {
     private async mcpRequest(body: any): Promise<any> {
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
             'Authorization': `Bearer ${this.apiToken}`
         };
         if (this.sessionId) {
