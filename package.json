@@ -2,21 +2,28 @@
   "name": "pi-extension-data-architect",
   "version": "2.3.0",
   "description": "Allows pi to autonomously design and manage data architectures using js-doc-store",
-  "keywords": ["pi-package", "data-architect", "autonomous-db"],
+  "keywords": [
+    "pi-package",
+    "data-architect",
+    "autonomous-db"
+  ],
   "main": "index.js",
   "type": "module",
   "pi": {
-    "extensions": ["./extensions"]
+    "extensions": [
+      "./extensions"
+    ]
   },
   "scripts": {
     "bootstrap": "node scripts/bootstrap.cjs"
   },
   "dependencies": {
-    "js-doc-store": "^1.0.0"
+    "js-doc-store": "^1.0.0",
+    "ssh2": "^1.17.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-ai": "*"
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
   },
   "license": "MIT"
 }

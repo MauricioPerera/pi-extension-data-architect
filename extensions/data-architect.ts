@@ -135,6 +135,18 @@ class ApiClient {
         return this.request('POST', '/admin/vector/drop', { collection });
     }
 
+    async vaultGet(secretId: string) {
+        return this.request('POST', '/admin/vault/get', { secretId });
+    }
+
+    async connectionsList() {
+        return this.request('POST', '/admin/connections/list', {});
+    }
+
+    async connectionsRegister(connection: { name: string; host: string; port: number; username: string; vaultSecretId: string; label?: string }) {
+        return this.request('POST', '/admin/connections/register', connection);
+    }
+
     // Public
     async listTables() {
         return this.request('GET', '/public/tables');
@@ -1297,6 +1309,125 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
             } catch (e: any) {
                 return {
                     content: [{ type: "text", text: `Error de conexión: ${e.message}` }],
+                    isError: true
+                };
+            }
+        }
+    }));
+
+    // ============================================================================
+    // VPS CONNECTION TOOLS (Local SSH execution, remote credential vault)
+    // ============================================================================
+
+    pi.registerTool(defineTool({
+        name: "arch_vps_list",
+        label: "List VPS Connections",
+        description: "Lists all registered VPS/SSH connections stored on the remote server (metadata only, no secrets exposed).",
+        parameters: Type.Object({}),
+        async execute(_, __) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "VPS management requires remote API mode." }],
+                    isError: true
+                };
+            }
+            const result = await apiClient.connectionsList();
+            const connections = result.connections || [];
+            const text = connections.map((c: any) =>
+                `- ${c.name} (${c.label || 'no label'})\n  Host: ${c.host}:${c.port || 22}\n  User: ${c.username}`
+            ).join('\n');
+            return {
+                content: [{ type: "text", text: text || "No connections registered." }],
+                details: { connections }
+            };
+        }
+    }));
+
+    pi.registerTool(defineTool({
+        name: "arch_vps_connect",
+        label: "Connect to VPS",
+        description: "Fetches credentials from the server vault and executes an SSH command on the target VPS locally. The password is never exposed in output.",
+        parameters: Type.Object({
+            name: Type.String({ description: "Connection name (registered on server)" }),
+            command: Type.String({ description: "Shell command to execute on the remote host" })
+        }),
+        async execute(_, params) {
+            if (!apiClient) {
+                return {
+                    content: [{ type: "text", text: "VPS connection requires remote API mode." }],
+                    isError: true
+                };
+            }
+
+            try {
+                // 1. Fetch connection metadata
+                const listResult = await apiClient.connectionsList();
+                const connections = listResult.connections || [];
+                const connMeta = connections.find((c: any) => c.name === params.name);
+                if (!connMeta) {
+                    return {
+                        content: [{ type: "text", text: `Connection '${params.name}' not found. Register it first using the server API.` }],
+                        isError: true
+                    };
+                }
+
+                // 2. Fetch secret from vault
+                const vaultResult = await apiClient.vaultGet(connMeta.vaultSecretId);
+                if (!vaultResult.success) {
+                    return {
+                        content: [{ type: "text", text: `Failed to retrieve vault secret: ${vaultResult.message}` }],
+                        isError: true
+                    };
+                }
+                const password = vaultResult.value;
+
+                // 3. Execute SSH locally
+                const { Client } = await import('ssh2');
+                const client = new Client();
+
+                const output = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
+                    let stdout = '';
+                    let stderr = '';
+                    let code: number | null = null;
+
+                    client.on('ready', () => {
+                        client.exec(params.command, (err: any, stream: any) => {
+                            if (err) {
+                                client.end();
+                                return reject(err);
+                            }
+                            stream.on('close', (exitCode: number | null) => {
+                                code = exitCode;
+                                client.end();
+                                resolve({ stdout, stderr, code });
+                            });
+                            stream.on('data', (data: Buffer) => {
+                                stdout += data.toString();
+                            });
+                            stream.stderr.on('data', (data: Buffer) => {
+                                stderr += data.toString();
+                            });
+                        });
+                    }).on('error', (err: any) => {
+                        reject(err);
+                    }).connect({
+                        host: connMeta.host,
+                        port: connMeta.port || 22,
+                        username: connMeta.username,
+                        password
+                    });
+                });
+
+                return {
+                    content: [{
+                        type: "text",
+                        text: `SSH to ${params.name} (${connMeta.host})\nExit code: ${output.code ?? 'N/A'}\n\nSTDOUT:\n${output.stdout || '(empty)'}\n\nSTDERR:\n${output.stderr || '(empty)'}`
+                    }],
+                    details: { host: connMeta.host, command: params.command, exitCode: output.code }
+                };
+            } catch (e: any) {
+                return {
+                    content: [{ type: "text", text: `SSH connection failed: ${e.message}` }],
                     isError: true
                 };
             }
