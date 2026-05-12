@@ -24,7 +24,7 @@ import path from "path";
 // ============================================================================
 
 const DEFAULT_DATA_DIR = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.pi', 'agent', 'dynamic-data');
-const DEFAULT_API_URL = 'https://js-doc-store-server.rckflr.workers.dev';
+const DEFAULT_API_URL = 'http://localhost:3000'; // Configure via Pi settings or env
 
 // ============================================================================
 // MODE DETECTION
