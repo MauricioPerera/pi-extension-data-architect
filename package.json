@@ -1,6 +1,6 @@
 {
   "name": "pi-extension-data-architect",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "description": "Pi package for autonomous data architecture with js-doc-store. Provides custom tools, dynamic skill registry, conversation memory, and schema design patterns.",
   "keywords": [
     "pi-package",
