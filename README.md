@@ -1,4 +1,4 @@
-# Pi Extension: Data Architect v2.2
+# Pi Extension: Data Architect v2.3
 
 Pi Extension: Data Architect empowers the AI agent to autonomously design and manage data architectures using [js-doc-store](https://www.npmjs.com/package/js-doc-store) locally or [js-doc-store-server](https://github.com/MauricioPerera/js-doc-store-server) via REST API.
 
@@ -30,7 +30,19 @@ Instead of just writing code, the agent can now build its own internal data syst
 - **Cross-Session Persistence**: Skills survive Pi restarts (stored in `data/skills.json`)
 - **Easy Registration**: New skill = one `arch_insert` call
 
+### New in v2.3: Cloudflare MCP Integration
+- **Cloudflare MCP as Native Tools**: Pi can call `mcp.cloudflare.com` via `arch_cf_mcp_search` + `arch_cf_mcp_execute` — no external MCP client required
+- **Code Mode Discovery**: Search Cloudflare's OpenAPI spec with JavaScript, then execute discovered endpoints
+- **Auto-Auth**: Reads `~/.wrangler/config/default.toml` automatically if `wrangler login` was used
+- **Private Embeddings**: New `arch_cf_embed` tool for generating multilingual Matryoshka embeddings via a private Worker. Configured via `GEMMA_EMBED_URL` + `GEMMA_EMBED_API_KEY` env vars (never hardcoded)
+- **Infra as Code**: From the same Pi session, manage Cloudflare Workers, KV, D1, DNS, and more
+
 ### New in v2.2: Conversation Memory
+- **Cloudflare MCP as Native Tools**: Pi can call `mcp.cloudflare.com` via `arch_cf_mcp_search` + `arch_cf_mcp_execute` — no external MCP client required
+- **Code Mode Discovery**: Search Cloudflare's OpenAPI spec with JavaScript, then execute discovered endpoints
+- **Auto-Auth**: Reads `~/.wrangler/config/default.toml` automatically if `wrangler login` was used
+- **Private Embeddings**: New `arch_cf_embed` tool for generating multilingual Matryoshka embeddings via a private Worker. Configured via `GEMMA_EMBED_URL` + `GEMMA_EMBED_API_KEY` env vars (never hardcoded)
+- **Infra as Code**: From the same Pi session, manage Cloudflare Workers, KV, D1, DNS, and more
 - **Persistent Message History**: Every message saved to the `messages` table survives context compaction
 - **Auto-Increment Turns**: Save without specifying turn numbers; they auto-increment per conversation
 - **Recover Full Context**: After compaction, retrieve complete history with `arch_message_history`
