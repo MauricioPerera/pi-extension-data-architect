@@ -1,6 +1,6 @@
 ---
 name: skill-registry
-version: 2.1.0
+version: 2.2.0
 tags: skills,registry,discovery,meta-pattern,architecture
 description: Meta-skill pattern for dynamic skill discovery. Keep only ONE SKILL.md on filesystem; query all specialized skills on-demand from js-doc-store-server by tags.
 author: MauricioPerera
@@ -202,7 +202,7 @@ async function migrateSkills(apiUrl, token, skillsDir) {
           description: title,
           content
         }
-      })
+      }))
     });
 
     console.log(`Migrated: ${dir}`);
@@ -219,3 +219,89 @@ async function migrateSkills(apiUrl, token, skillsDir) {
 - **Tags are comma-separated**: Use `database,api,server` not `database api server`.
 - **Content field is required**: A skill without content is useless for context injection.
 - **Server must be running**: Discovery fails if `js-doc-store-server` is offline (fallback: use filesystem backup).
+
+## Server Startup Procedure
+
+---
+name: server-startup
+version: 1.0.0
+tags: server,startup,js-doc-store,ops,bootstrap
+description: Procedimiento para iniciar el servidor js-doc-store-server cuando está detenido.
+---
+
+# Procedimiento de inicio del servidor js-doc-store-server
+
+Este documento describe cómo iniciar o reiniciar el servidor `js-doc-store-server` que actúa como memoria local del agente Pi.
+
+## Requisitos previos
+
+- Node.js >=16.0.0 instalado.
+- Acceso al directorio del servidor: `C:\repos\js-doc-store-server`.
+- (Opcional) PM2 instalado globalmente para ejecución en segundo plano.
+
+## Pasos para iniciar el servidor
+
+1. **Abrir una terminal** (cmd, PowerShell, o cualquier terminal compatible).
+
+2. **Navegar al directorio del servidor**:
+   ```bash
+   cd C:\repos\js-doc-store-server
+   ```
+
+3. **Instalar dependencias** (solo la primera vez o si se actualizó `package.json`):
+   ```bash
+   npm install
+   ```
+
+4. **Iniciar el servidor en modo desarrollo**:
+   ```bash
+   npm start
+   ```
+   Esto ejecuta `node server.js` y muestra los logs en la terminal.
+   
+   El servidor escuchará en `http://localhost:3000` por defecto.
+
+5. **Verificar que está corriendo**:
+   - Deberías ver en la consola algo como:
+     ```
+     Server listening on http://localhost:3000
+     ```
+   - O puedes comprobar desde otra terminal:
+     ```bash
+     curl -s http://localhost:3000/public/tables
+     ```
+     (Esto retornará una lista de tablas si el servidor responde).
+
+6. **Opcional: Ejecutar en segundo plano con PM2**
+   Si PM2 está instalado:
+   ```bash
+   pm2 start server.js --name js-doc-store
+   ```
+   Para ver los logs:
+   ```bash
+   pm2 logs js-doc-store
+   ```
+   Para detenerlo:
+   ```bash
+   pm2 stop js-doc-store
+   ```
+
+## Solución de problemas comunes
+
+- **Error `EADDRINUSE`**: Otro proceso ya está usando el puerto 3000. Puedes:
+  - Detener el proceso existente: `pm2 delete js-doc-store` o usar el Administrador de tareas.
+  - Cambiar el puerto editando `.env` y asignando otro valor a `PORT`.
+
+- **Error de módulo no encontrado**: Asegúrate de haber ejecutado `npm install` después de clonar o actualizar el repositorio.
+
+- **Servidor no responde**: Revisa el archivo `server.log` en el directorio para ver trazas de error.
+
+## Integración con Pi
+
+Una vez el servidor está corriendo, las herramientas `arch_*` (`arch_query`, `arch_insert`, `arch_skill_discover`, etc.) funcionarán contra `http://localhost:3000`. Pi detectará automáticamente el modo `local` definido en `~\.pi\agent\settings.json`.
+
+## Notas
+
+- El servidor almacena sus datos en la carpeta `data/` dentro del directorio del servidor.
+- Para respaldar o mover la base de datos, copia toda la carpeta `data/`.
+- En entornos de producción se recomienda usar PM2 o un servicio de Windows para mantener el servidor activo continuamente.
