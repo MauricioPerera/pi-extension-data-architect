@@ -16,6 +16,7 @@
 
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
+import { spawn } from "node:child_process";
 import fs from "fs";
 import path from "path";
 
@@ -50,7 +51,37 @@ function getMode(settings: any): { mode: 'local' | 'remote', apiUrl?: string, to
 class ApiClient {
     constructor(private baseUrl: string, private token?: string) {}
 
-    private async request(method: string, path: string, body?: any): Promise<any> {
+    private getSettingsPath(): string {
+        const home = process.env.HOME || process.env.USERPROFILE || '.';
+        return path.join(home, '.pi', 'agent', 'settings.json');
+    }
+
+    private async tryRefreshToken(): Promise<boolean> {
+        try {
+            const raw = fs.readFileSync(this.getSettingsPath(), 'utf-8');
+            const settings = JSON.parse(raw);
+            const email = settings.dataArchitectEmail;
+            const password = settings.dataArchitectPassword;
+            if (!email || !password) return false;
+
+            const res = await fetch(`${this.baseUrl}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
+            });
+            if (!res.ok) return false;
+
+            const data = await res.json() as { token?: string };
+            if (!data.token) return false;
+
+            this.token = data.token;
+            settings.dataArchitectApiToken = data.token;
+            fs.writeFileSync(this.getSettingsPath(), JSON.stringify(settings, null, 2));
+            return true;
+        } catch { return false; }
+    }
+
+    private async request(method: string, endpoint: string, body?: any, isRetry = false): Promise<any> {
         const headers: Record<string, string> = {
             'Content-Type': 'application/json'
         };
@@ -58,11 +89,16 @@ class ApiClient {
             headers['Authorization'] = `Bearer ${this.token}`;
         }
 
-        const response = await fetch(`${this.baseUrl}${path}`, {
+        const response = await fetch(`${this.baseUrl}${endpoint}`, {
             method,
             headers,
             body: body ? JSON.stringify(body) : undefined
         });
+
+        if (response.status === 401 && !isRetry) {
+            const refreshed = await this.tryRefreshToken();
+            if (refreshed) return this.request(method, endpoint, body, true);
+        }
 
         if (!response.ok) {
             const error = await response.text();
@@ -1342,6 +1378,37 @@ export default function dataArchitectExtension(pi: ExtensionAPI) {
             };
         }
     }));
+
+    // ============================================================================
+    // SERVER AUTO-START (Remote mode: spawn server on session_start if unreachable)
+    // ============================================================================
+
+    if (modeConfig.mode === 'remote' && modeConfig.apiUrl && typeof (pi as any).on === 'function') {
+        (pi as any).on('session_start', async (_event: any, ctx: any) => {
+            try {
+                const res = await fetch(`${modeConfig.apiUrl}/health`, {
+                    signal: AbortSignal.timeout(2000)
+                });
+                if (res.ok) return; // Already running
+            } catch { /* not running */ }
+
+            const serverCmd = getSetting('dataArchitectServerCmd', '');
+            if (!serverCmd) return;
+
+            try {
+                const parts = serverCmd.split(/\s+/);
+                const proc = spawn(parts[0], parts.slice(1), {
+                    detached: true,
+                    stdio: 'ignore',
+                    shell: process.platform === 'win32',
+                });
+                proc.unref();
+                if (ctx?.hasUI) {
+                    ctx.ui.notify('Data architect server starting...', 'info');
+                }
+            } catch { /* ignore spawn errors */ }
+        });
+    }
 
     pi.registerTool(defineTool({
         name: "arch_vps_connect",
