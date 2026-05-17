@@ -158,7 +158,18 @@ pi settings set dataArchitectApiToken your-jwt-token
 
 # For local mode, set the data directory (optional, has default)
 pi settings set dataArchitectDir /path/to/data
+
+# For remote mode: credentials for automatic JWT refresh on token expiry
+pi settings set dataArchitectEmail admin@example.com
+pi settings set dataArchitectPassword your-password
+
+# For remote mode: command to auto-start the server on session_start (optional)
+pi settings set dataArchitectServerCmd "npx js-doc-store-server serve"
 ```
+
+> **Auto-refresh:** When a request returns 401 (token expired), the extension automatically re-authenticates using `dataArchitectEmail`/`dataArchitectPassword` and saves the new token to settings — no manual intervention needed.
+>
+> **Auto-start:** On `session_start`, if the server is unreachable and `dataArchitectServerCmd` is set, the extension spawns the server as a detached background process.
 
 ### Mode Comparison
 
