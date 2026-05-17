@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { spawn } from "node:child_process";
 import { parseFrontmatter, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { validateTaskFields } from "./security.js";
 
 /* ── Config helpers ─────────────────────────────────────────────────────── */
 
@@ -284,6 +285,15 @@ export default function taskManagerExtension(pi: ExtensionAPI) {
 				if (!params.title) {
 					return { content: [{ type: "text", text: "❌ create requires title" }], isError: true };
 				}
+				const createSec = validateTaskFields({
+					title: params.title,
+					description: params.description,
+					input: params.input,
+					agent: params.agent || undefined,
+				});
+				if (!createSec.ok) {
+					return { content: [{ type: "text", text: `❌ ${createSec.reason}` }], isError: true };
+				}
 				const id = makeId();
 				const data = {
 					id,
@@ -386,6 +396,10 @@ export default function taskManagerExtension(pi: ExtensionAPI) {
 				if (!params.id || !params.agent) {
 					return { content: [{ type: "text", text: "❌ assign requires id + agent" }], isError: true };
 				}
+				const assignSec = validateTaskFields({ agent: params.agent });
+				if (!assignSec.ok) {
+					return { content: [{ type: "text", text: `❌ ${assignSec.reason}` }], isError: true };
+				}
 				// Verify agent exists
 				const agentDef = await resolveAgent(cfg, params.agent);
 				if (!agentDef) {
@@ -415,6 +429,16 @@ export default function taskManagerExtension(pi: ExtensionAPI) {
 				const task = result.data?.[0];
 				if (!task) return { content: [{ type: "text", text: `❌ Task not found: ${params.id}` }], isError: true };
 				if (!task.agent) return { content: [{ type: "text", text: `❌ Task ${params.id} has no assigned agent. Use assign first.` }], isError: true };
+
+				// Security: validate stored task fields before execution
+				const execSec = validateTaskFields({
+					agent: task.agent,
+					description: task.description,
+					input: task.input,
+				});
+				if (!execSec.ok) {
+					return { content: [{ type: "text", text: `❌ Task blocked by security policy: ${execSec.reason}` }], isError: true };
+				}
 
 				// Resolve agent
 				const agentDef = await resolveAgent(cfg, task.agent);
